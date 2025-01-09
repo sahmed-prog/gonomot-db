@@ -29,9 +29,9 @@ class GMTestSurvey extends Command
      */
     public function handle()
     {
-        $baseUrl = 'https://gonomot.anvs.xyz/api/';
+        $baseUrl = 'https://gonomot.org/api/';
         $endpoint = 'survey';
-        $apiToken = '9|ZipJpnbit2tF8R9asp097oXaWCx9kH00DNkyfJfcb6771b64';
+        $apiToken = '8|hIDbG3IzClaNje5bYZ28iHouDFCREYXd6BD1eXBQc27157c9';
         $page = $this->option('page');
         $queryParams = ['page' => $page];
 
@@ -49,6 +49,7 @@ class GMTestSurvey extends Command
 
             $responseData = json_decode($response->getBody(), true);
             $surveys = $responseData['data']['surveys'];
+            dd($surveys);
 
             // Arrays to hold data for each table
             $surveysTableData = [];
