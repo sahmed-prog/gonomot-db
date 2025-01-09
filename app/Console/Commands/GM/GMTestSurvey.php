@@ -5,6 +5,8 @@ namespace App\Console\Commands\GM;
 use Illuminate\Console\Command;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
+use App\Models\Surveys\PrimarySurvey;
+use Carbon\Carbon;
 
 class GMTestSurvey extends Command
 {
@@ -48,83 +50,66 @@ class GMTestSurvey extends Command
             ]);
 
             $responseData = json_decode($response->getBody(), true);
-            $surveys = $responseData['data']['surveys'];
-            dd($surveys);
+            $totalPages = $responseData['data']['total_page'];  // Total pages available
+            $currentPage = $responseData['data']['current_page'];  // Current page number
 
-            // Arrays to hold data for each table
-            $surveysTableData = [];
-            $surveyDetailsTableData = [];
-            $cabinetMembersTableData = [];
-            $qualitiesTableData = [];
-            $occupationsTableData = [];
-            $electoralAreasTableData = [];
-            $leadershipRolesTableData = [];
+            // Extracting surveys from the response
+            $surveys = $responseData['data']['surveys'];
+
+            // Array to hold the extracted survey objects
+            $extractedSurveyObjects = [];
 
             foreach ($surveys as $survey) {
-                // Extract survey data
-                $surveysTableData[] = [
-                    'id' => $survey['id'],
-                    'user_id' => $survey['user_id'],
-                    'referral_code' => $survey['referral_code'],
-                    'survey_date' => $survey['survey_date'],
-                ];
+                // Extract the user_id
+                $userId = $survey['user_id'];
 
-                // Extract survey details
-                foreach ($survey['survey_details'] as $key => $detail) {
-                    if (strpos($key, 'cabinet_member') === 0) {
-                        // Extract cabinet member data
-                        $cabinetMembersTableData[] = [
-                            'id' => $detail['id'],
-                            'survey_id' => $survey['id'],
-                            'name' => $detail['name'],
-                            'quality_id' => $detail['quality_1']['id'],
-                        ];
-
-                        // Extract qualities data
-                        $qualitiesTableData[] = [
-                            'id' => $detail['quality_1']['id'],
-                            'name' => $detail['quality_1']['name'],
-                        ];
-                    } elseif ($key === 'surveyor_occupation') {
-                        // Extract occupation data
-                        $occupationsTableData[] = [
-                            'id' => $detail['occupation']['id'],
-                            'title_en' => $detail['occupation']['title_en'],
-                        ];
-                    } elseif ($key === 'surveyor_electoral_area') {
-                        // Extract electoral area data
-                        $electoralAreasTableData[] = [
-                            'id' => $detail['constituency']['id'],
-                            'title_en' => $detail['constituency']['title_en'],
-                        ];
-                    } elseif ($key === 'surveyor_leadership') {
-                        // Extract leadership role data
-                        $leadershipRolesTableData[] = [
-                            'id' => $detail['id'],
-                            'name' => $detail['name'],
-                        ];
-                    } else {
-                        // General survey details
-                        $surveyDetailsTableData[] = [
-                            'id' => $detail['id'],
-                            'survey_id' => $survey['id'],
-                            'question_key' => $detail['question_key'],
-                            'name' => $detail['name'] ?? null,
-                            'govt_system_id' => $detail['govt_system_id'] ?? null,
-                            'is_other_govt_system' => $detail['is_other_govt_system'] ?? null,
-                        ];
-                    }
+                // Extract the government name from survey_details
+                $governmentName = $survey['survey_details']['government']['name'] ?? null;
+                $cm_1 = $survey['survey_details']['cabinet_member_1']['name'] ?? null;
+                $cm_2 = $survey['survey_details']['cabinet_member_2']['name'] ?? null;
+                $cm_3 = $survey['survey_details']['cabinet_member_3']['name'] ?? null;
+                $cm_4 = $survey['survey_details']['cabinet_member_4']['name'] ?? null;
+                $cm_5 = $survey['survey_details']['cabinet_member_5']['name'] ?? null;
+                $pm_candidate = $survey['survey_details']['pm_candidate']['name'] ?? null;
+                $surveyor_electoral_area = $survey['survey_details']['surveyor_electoral_area']['constituency']['title_en'] ?? null;
+                $surveyor_administrative = $survey['survey_details']['surveyor_administrative']['name'] ?? null;
+                $surveyor_occupation = $survey['survey_details']['surveyor_occupation']['occupation']['title_en'] ?? null;
+                $surveyor_leadership = $survey['survey_details']['surveyor_leadership']['name'] ?? null;
+                $referral_code = $survey['referral_code'] ?? null;
+                $survey_date = $survey['survey_date'] ?? null;
+                if ($survey_date) {
+                    $survey_date = Carbon::createFromFormat('d-m-Y H:i:s', $survey_date)->format('Y-m-d H:i:s');
                 }
+                $extractedSurveyObject = [
+                    'user_id' => $userId,
+                    'government' => $governmentName,
+                    'cm_1' => $cm_1,
+                    'cm_2' => $cm_2,
+                    'cm_3' => $cm_3,
+                    'cm_4' => $cm_4,
+                    'cm_5' => $cm_5,
+                    'pm_candidate' => $pm_candidate,
+                    'surveyor_electoral_area' => $surveyor_electoral_area,
+                    'surveyor_administrative' => $surveyor_administrative,
+                    'surveyor_occupation' => $surveyor_occupation,
+                    'surveyor_leadership' => $surveyor_leadership,
+                    'referral_code' => $referral_code,
+                    'survey_date' => $survey_date,
+                    'ingested_at' => Carbon::now(),
+                ];
+                PrimarySurvey::updateOrInsert(
+                    ['user_id' => $userId],
+                    $extractedSurveyObject 
+                );
             }
 
-            // Display extracted data for debugging
-            $this->info('Surveys Table Data: ' . print_r($surveysTableData, true));
-            $this->info('Survey Details Table Data: ' . print_r($surveyDetailsTableData, true));
-            $this->info('Cabinet Members Table Data: ' . print_r($cabinetMembersTableData, true));
-            $this->info('Qualities Table Data: ' . print_r($qualitiesTableData, true));
-            $this->info('Occupations Table Data: ' . print_r($occupationsTableData, true));
-            $this->info('Electoral Areas Table Data: ' . print_r($electoralAreasTableData, true));
-            $this->info('Leadership Roles Table Data: ' . print_r($leadershipRolesTableData, true));
+            // Check if we have more pages to fetch
+            if ($currentPage < $totalPages) {
+                $this->info("Fetching page {$currentPage} of {$totalPages}...");
+                $this->call('gm:test-survey', ['--page' => $currentPage + 1]);
+            } else {
+                $this->info("Reached the last page: {$currentPage} of {$totalPages}");
+            }
 
         } catch (RequestException $e) {
             $this->error('Error: ' . $e->getMessage());
@@ -136,5 +121,4 @@ class GMTestSurvey extends Command
 
         return 0;
     }
-
 }
