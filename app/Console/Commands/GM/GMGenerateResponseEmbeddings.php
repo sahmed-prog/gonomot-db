@@ -67,6 +67,7 @@ class GMGenerateResponseEmbeddings extends Command
             }
 
             if (!empty($textsToEmbed)) {
+                dd($textsToEmbed);
                 try {
                     // Get embeddings for all valid fields
                     $embeddings = OpenAiRequest::getEmbeddings($textsToEmbed);
